@@ -1,16 +1,19 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
 	"log"
 	"math/rand"
+	"net/http"
 	"os"
 	"os/signal"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -37,6 +40,10 @@ var (
 		"mimi", "momo", "mimo", "tree", "birb", "shiro",
 	}
 
+	authorized_accounts = []string{
+		"198514377421225984",
+	}
+
 	bucket = "www.momobot.net"
 
 	commands = []*discordgo.ApplicationCommand{}
@@ -44,6 +51,8 @@ var (
 	commandHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){}
 
 	momos []string
+
+	client s3.Client
 )
 
 func init() {
@@ -76,7 +85,8 @@ func main() {
 	}
 
 	// Create an Amazon S3 service client
-	client := s3.NewFromConfig(cfg)
+	client = *s3.NewFromConfig(cfg)
+
 	out, err := client.ListObjectsV2(context.TODO(), &s3.ListObjectsV2Input{
 		Bucket: &bucket,
 		Prefix: &objects[1],
@@ -134,7 +144,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 		var n = rand.Intn(len(momos))
 
-		s.ChannelMessageSend(m.ChannelID, momos[n])
+		s.ChannelMessageSend(m.ChannelID, create_url(momos[n]))
 	}
 }
 
@@ -158,20 +168,7 @@ func populateCommandInfo(commandHandlers map[string]func(s *discordgo.Session, i
 			},
 		}
 
-		// create commandHandler
-		var commandHandler = func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-			option := i.ApplicationCommandData().Options[0]
-			key := option.Value.(string)
-
-			attachment_url := i.Data.(discordgo.ApplicationCommandInteractionData).Resolved.Attachments[key].URL
-
-			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: "TODO upload picture with url " + attachment_url,
-				},
-			})
-		}
+		commandHandler := create_command_handler(obj)
 
 		// Add json to commands and commandHandlers for the object
 		commands = append(commands, command)
@@ -179,4 +176,82 @@ func populateCommandInfo(commandHandlers map[string]func(s *discordgo.Session, i
 	}
 
 	return commands
+}
+
+func contains(s []string, str string) bool {
+	for _, v := range s {
+		if v == str {
+			return true
+		}
+	}
+
+	return false
+}
+
+func create_url(key string) string {
+	return fmt.Sprintf("https://s3.us-east-1.amazonaws.com/%s/%s", bucket, key)
+}
+
+func create_command_handler(obj string) func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	return func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		id := i.Member.User.ID
+
+		if !contains(authorized_accounts, id) {
+			log.Printf("Attempted upload by UNAUTHORIZED account %s", id)
+
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "Nuh uh",
+				},
+			})
+
+			return
+		}
+
+		option := i.ApplicationCommandData().Options[0]
+		key := option.Value.(string)
+
+		attachment_url := i.Data.(discordgo.ApplicationCommandInteractionData).Resolved.Attachments[key].URL
+
+		// Download from URL into memory
+		resp, err := http.Get(attachment_url)
+
+		if err != nil {
+			fmt.Printf("Failed to fetch from URL %s\n", attachment_url)
+			return
+		} else {
+			// Create reader from image
+			buf := new(bytes.Buffer)
+			buf.ReadFrom(resp.Body)
+			reader := bytes.NewReader(buf.Bytes())
+
+			var s3key = fmt.Sprintf("%s/%d.jpg", obj, rand.Uint64())
+
+			// Put it
+			_, err := client.PutObject(context.TODO(), &s3.PutObjectInput{
+				Bucket: &bucket,
+				Key:    &s3key,
+				Body:   reader,
+				ACL:    types.ObjectCannedACLPublicRead,
+			})
+
+			if err != nil {
+				fmt.Printf("Failed to upload to s3 with error %v\n", err)
+				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: fmt.Sprintf("Failed to upload your picture with err %v", err),
+					},
+				})
+			} else {
+				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: fmt.Sprintf("Uploaded your picture! Now at URL %s", create_url(s3key)),
+					},
+				})
+			}
+		}
+	}
 }
