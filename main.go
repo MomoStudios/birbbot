@@ -87,21 +87,6 @@ func main() {
 	// Create an Amazon S3 service client
 	client = *s3.NewFromConfig(cfg)
 
-	out, err := client.ListObjectsV2(context.TODO(), &s3.ListObjectsV2Input{
-		Bucket: &bucket,
-		Prefix: &objects[1],
-	})
-
-	if err != nil {
-		log.Printf("Unable to fetch momos with error %v\n", err)
-	} else {
-		momos = make([]string, len(out.Contents))
-
-		for i, obj := range out.Contents {
-			momos[i] = *obj.Key
-		}
-	}
-
 	_, err = s.ApplicationCommandBulkOverwrite(s.State.User.ID, *GuildID, commands)
 
 	if err != nil {
@@ -127,24 +112,38 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if m.Author.ID == s.State.User.ID {
 		return
 	}
-	// If the message is "ping" reply with "Pong!"
-	if m.Content == "!listbirds" {
-		s.ChannelMessageSend(m.ChannelID, "Placeholder")
-	}
 
-	// If the message is "pong" reply with "Ping!"
-	if m.Content == "!honk" {
-		s.ChannelMessageSend(m.ChannelID, "HOOOONK")
-	}
+	if m.Content[0] == '!' {
 
-	if m.Content == "!momo" {
-		if len(momos) == 0 {
-			return
+		object := m.Content[1:]
+
+		if contains(objects, object) {
+			out, err := client.ListObjectsV2(context.TODO(), &s3.ListObjectsV2Input{
+				Bucket: &bucket,
+				Prefix: &object,
+			})
+
+			if err != nil {
+				log.Printf("Unable to fetch %ss with error %v\n", object, err)
+				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Failure to load your %s :[", object))
+				return
+			}
+
+			momos = make([]string, len(out.Contents))
+
+			for i, obj := range out.Contents {
+				momos[i] = *obj.Key
+			}
+
+			if len(momos) == 0 {
+				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Aint any %s here", object))
+				return
+			}
+
+			var n = rand.Intn(len(momos))
+
+			s.ChannelMessageSend(m.ChannelID, create_url(momos[n]))
 		}
-
-		var n = rand.Intn(len(momos))
-
-		s.ChannelMessageSend(m.ChannelID, create_url(momos[n]))
 	}
 }
 
