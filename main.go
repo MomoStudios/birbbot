@@ -193,7 +193,6 @@ func contains(s []string, str string) bool {
 }
 
 func create_url(key string) string {
-	// TODO: bug because we're not escaping spaces and whatever else. Need to format key to be URL appropriate.
 	return fmt.Sprintf("https://s3.us-east-1.amazonaws.com/%s/%s", bucket, url.QueryEscape(key))
 }
 
