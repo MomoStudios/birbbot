@@ -1,12 +1,12 @@
-* Birb Bot
+# Birb Bot
 
-* How?
+## How?
 
 ```
 go build
 ./birbbot -token $TOKEN
 ```
 
-* Why?
+## Why?
 
 Birbs
