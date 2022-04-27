@@ -8,6 +8,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 
@@ -135,6 +136,10 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 				momos[i] = *obj.Key
 			}
 
+			if out.ContinuationToken != nil {
+				log.Printf("There were more %s available!\n", object)
+			}
+
 			if len(momos) == 0 {
 				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Aint any %s here", object))
 				return
@@ -155,7 +160,7 @@ func populateCommandInfo(commandHandlers map[string]func(s *discordgo.Session, i
 
 		// create command object
 		var command *discordgo.ApplicationCommand = &discordgo.ApplicationCommand{
-			Name:        fmt.Sprintf("%s", obj),
+			Name:        obj,
 			Description: fmt.Sprintf("Allows you to upload one %s", obj),
 			Options: []*discordgo.ApplicationCommandOption{
 				{
@@ -188,7 +193,8 @@ func contains(s []string, str string) bool {
 }
 
 func create_url(key string) string {
-	return fmt.Sprintf("https://s3.us-east-1.amazonaws.com/%s/%s", bucket, key)
+	// TODO: bug because we're not escaping spaces and whatever else. Need to format key to be URL appropriate.
+	return fmt.Sprintf("https://s3.us-east-1.amazonaws.com/%s/%s", bucket, url.QueryEscape(key))
 }
 
 func create_command_handler(obj string) func(s *discordgo.Session, i *discordgo.InteractionCreate) {
