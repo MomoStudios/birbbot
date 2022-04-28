@@ -156,11 +156,14 @@ func populateCommandInfo(commandHandlers map[string]func(s *discordgo.Session, i
 	objects []string) (commands []*discordgo.ApplicationCommand) {
 	// Loop over every object
 	for _, obj := range objects {
-		log.Println("Creating command for " + obj)
+		// command to upload the obj
+		var key = "upload" + obj
+
+		log.Println("Creating command for " + key)
 
 		// create command object
 		var command *discordgo.ApplicationCommand = &discordgo.ApplicationCommand{
-			Name:        obj,
+			Name:        key,
 			Description: fmt.Sprintf("Allows you to upload one %s", obj),
 			Options: []*discordgo.ApplicationCommandOption{
 				{
@@ -172,11 +175,31 @@ func populateCommandInfo(commandHandlers map[string]func(s *discordgo.Session, i
 			},
 		}
 
-		commandHandler := create_command_handler(obj)
+		var commandHandler = create_upload_command_handler(obj)
 
 		// Add json to commands and commandHandlers for the object
 		commands = append(commands, command)
-		commandHandlers[obj] = commandHandler
+		commandHandlers[key] = commandHandler
+
+		key = obj
+
+		// command to fetch the obj
+
+		log.Println("Creating command for " + key)
+
+		// create command object
+		command = &discordgo.ApplicationCommand{
+			Name:        key,
+			Description: fmt.Sprintf("Allows you to fetch one %s", obj),
+			Options:     []*discordgo.ApplicationCommandOption{},
+		}
+
+		commandHandler = create_fetch_command_handler(obj)
+
+		// Add json to commands and commandHandlers for the object
+		commands = append(commands, command)
+		commandHandlers[key] = commandHandler
+
 	}
 
 	return commands
@@ -196,7 +219,60 @@ func create_url(key string) string {
 	return fmt.Sprintf("https://s3.us-east-1.amazonaws.com/%s/%s", bucket, url.QueryEscape(key))
 }
 
-func create_command_handler(obj string) func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+func create_fetch_command_handler(obj string) func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	return func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		out, err := client.ListObjectsV2(context.TODO(), &s3.ListObjectsV2Input{
+			Bucket: &bucket,
+			Prefix: &obj,
+		})
+
+		if err != nil {
+			log.Printf("Unable to fetch %ss with error %v\n", obj, err)
+			// s.ChannelMessageSend(i.ChannelID, fmt.Sprintf("Failure to load your %s :[", obj))
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: fmt.Sprintf("Failure to load your %s :[", obj),
+				},
+			})
+			return
+		}
+
+		momos = make([]string, len(out.Contents))
+
+		for i, obj := range out.Contents {
+			momos[i] = *obj.Key
+		}
+
+		if out.ContinuationToken != nil {
+			log.Printf("There were more %s available!\n", obj)
+		}
+
+		if len(momos) == 0 {
+			// s.ChannelMessageSend(i.ChannelID, fmt.Sprintf("Aint any %s here", obj))
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: fmt.Sprintf("Aint any %s here", obj),
+				},
+			})
+			return
+		}
+
+		var n = rand.Intn(len(momos))
+
+		// s.ChannelMessageSend(i.ChannelID, create_url(momos[n]))
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: create_url(momos[n]),
+			},
+		})
+
+	}
+}
+
+func create_upload_command_handler(obj string) func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	return func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		id := i.Member.User.ID
 
