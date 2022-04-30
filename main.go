@@ -43,7 +43,9 @@ var (
 	}
 
 	authorized_accounts = []string{
-		"198514377421225984",
+		"198514377421225984", //km42
+		"222144155604877322", //kara
+		"123583494365380608", //Nile
 	}
 
 	bucket = "www.momobot.net"
