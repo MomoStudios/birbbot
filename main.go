@@ -178,6 +178,11 @@ func create_url(key string) string {
 
 func create_fetch_command_handler(obj string) func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	return func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		respondOrLog(s, i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{},
+		})
+
 		out, err := client.ListObjectsV2(context.TODO(), &s3.ListObjectsV2Input{
 			Bucket: &bucket,
 			Prefix: &obj,
