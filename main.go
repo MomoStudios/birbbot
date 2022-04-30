@@ -109,54 +109,6 @@ func main() {
 	log.Println("Gracefully shutting down.")
 }
 
-// This function will be called (due to AddHandler above) every time a new
-// message is created on any channel that the authenticated bot has access to.
-func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
-
-	// Ignore all messages created by the bot itself
-	// This isn't required in this specific example but it's a good practice.
-	if m.Author.ID == s.State.User.ID {
-		return
-	}
-
-	if m.Content[0] == '!' {
-
-		object := m.Content[1:]
-
-		if contains(objects, object) {
-			out, err := client.ListObjectsV2(context.TODO(), &s3.ListObjectsV2Input{
-				Bucket: &bucket,
-				Prefix: &object,
-			})
-
-			if err != nil {
-				log.Printf("Unable to fetch %ss with error %v\n", object, err)
-				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Failure to load your %s :[", object))
-				return
-			}
-
-			momos = make([]string, len(out.Contents))
-
-			for i, obj := range out.Contents {
-				momos[i] = *obj.Key
-			}
-
-			if out.ContinuationToken != nil {
-				log.Printf("There were more %s available!\n", object)
-			}
-
-			if len(momos) == 0 {
-				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Aint any %s here", object))
-				return
-			}
-
-			var n = rand.Intn(len(momos))
-
-			s.ChannelMessageSend(m.ChannelID, create_url(momos[n]))
-		}
-	}
-}
-
 func populateCommandInfo(commandHandlers map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate),
 	objects []string) (commands []*discordgo.ApplicationCommand) {
 	// Loop over every object
@@ -234,7 +186,7 @@ func create_fetch_command_handler(obj string) func(s *discordgo.Session, i *disc
 		if err != nil {
 			log.Printf("Unable to fetch %ss with error %v\n", obj, err)
 			// s.ChannelMessageSend(i.ChannelID, fmt.Sprintf("Failure to load your %s :[", obj))
-			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			respondOrLog(s, i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
 					Content: fmt.Sprintf("Failure to load your %s :[", obj),
@@ -255,7 +207,7 @@ func create_fetch_command_handler(obj string) func(s *discordgo.Session, i *disc
 
 		if len(momos) == 0 {
 			// s.ChannelMessageSend(i.ChannelID, fmt.Sprintf("Aint any %s here", obj))
-			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			respondOrLog(s, i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
 					Content: fmt.Sprintf("Aint any %s here", obj),
@@ -267,13 +219,12 @@ func create_fetch_command_handler(obj string) func(s *discordgo.Session, i *disc
 		var n = rand.Intn(len(momos))
 
 		// s.ChannelMessageSend(i.ChannelID, create_url(momos[n]))
-		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		respondOrLog(s, i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
 				Content: create_url(momos[n]),
 			},
 		})
-
 	}
 }
 
@@ -284,7 +235,7 @@ func create_upload_command_handler(obj string) func(s *discordgo.Session, i *dis
 		if !contains(authorized_accounts, id) {
 			log.Printf("Attempted upload by UNAUTHORIZED account %s", id)
 
-			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			respondOrLog(s, i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
 					Content: "Nuh uh",
@@ -323,14 +274,14 @@ func create_upload_command_handler(obj string) func(s *discordgo.Session, i *dis
 
 			if err != nil {
 				fmt.Printf("Failed to upload to s3 with error %v\n", err)
-				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				respondOrLog(s, i.Interaction, &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
 					Data: &discordgo.InteractionResponseData{
 						Content: fmt.Sprintf("Failed to upload your picture with err %v", err),
 					},
 				})
 			} else {
-				s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				respondOrLog(s, i.Interaction, &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
 					Data: &discordgo.InteractionResponseData{
 						Content: fmt.Sprintf("Uploaded your picture! Now at URL %s", create_url(s3key)),
@@ -338,5 +289,13 @@ func create_upload_command_handler(obj string) func(s *discordgo.Session, i *dis
 				})
 			}
 		}
+	}
+}
+
+func respondOrLog(s *discordgo.Session, i *discordgo.Interaction, resp *discordgo.InteractionResponse) {
+	err := s.InteractionRespond(i, resp)
+
+	if err != nil {
+		log.Printf("Error responding: %v", err)
 	}
 }
