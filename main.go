@@ -71,7 +71,7 @@ func main() {
 	s.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
 		log.Printf("Logged in as: %v#%v", s.State.User.Username, s.State.User.Discriminator)
 	})
-	s.AddHandler(messageCreate)
+	// s.AddHandler(messageCreate)
 	err := s.Open()
 	if err != nil {
 		log.Fatalf("Cannot open the session: %v", err)
