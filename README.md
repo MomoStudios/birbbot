@@ -18,3 +18,4 @@ Birbs
 * permissions instead of merely authorized accounts (ie account X can upload to object Y)
 * Check file types of uploaded files instead of assumign its a jpg
 * Support uploading / embedding videos (discord supports this)
+* Upload image hashes on DDB to prevent dups
