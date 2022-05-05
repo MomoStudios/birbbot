@@ -178,11 +178,6 @@ func create_url(key string) string {
 
 func create_fetch_command_handler(obj string) func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	return func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-		respondOrLog(s, i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{},
-		})
-
 		out, err := client.ListObjectsV2(context.TODO(), &s3.ListObjectsV2Input{
 			Bucket: &bucket,
 			Prefix: &obj,
@@ -235,16 +230,18 @@ func create_fetch_command_handler(obj string) func(s *discordgo.Session, i *disc
 
 func create_upload_command_handler(obj string) func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	return func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		respondOrLog(s, i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{},
+		})
+
 		id := i.Member.User.ID
 
 		if !contains(authorized_accounts, id) {
 			log.Printf("Attempted upload by UNAUTHORIZED account %s", id)
 
-			respondOrLog(s, i.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: "Nuh uh",
-				},
+			updateResponseOrLog(s, i.Interaction, &discordgo.WebhookEdit{
+				Content: "Nuh uh",
 			})
 
 			return
@@ -279,18 +276,12 @@ func create_upload_command_handler(obj string) func(s *discordgo.Session, i *dis
 
 			if err != nil {
 				fmt.Printf("Failed to upload to s3 with error %v\n", err)
-				respondOrLog(s, i.Interaction, &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Content: fmt.Sprintf("Failed to upload your picture with err %v", err),
-					},
+				updateResponseOrLog(s, i.Interaction, &discordgo.WebhookEdit{
+					Content: fmt.Sprintf("Failed to upload your picture with err %v", err),
 				})
 			} else {
-				respondOrLog(s, i.Interaction, &discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Content: fmt.Sprintf("Uploaded your picture! Now at URL %s", create_url(s3key)),
-					},
+				updateResponseOrLog(s, i.Interaction, &discordgo.WebhookEdit{
+					Content: fmt.Sprintf("Uploaded your picture! Now at URL %s", create_url(s3key)),
 				})
 			}
 		}
@@ -302,5 +293,13 @@ func respondOrLog(s *discordgo.Session, i *discordgo.Interaction, resp *discordg
 
 	if err != nil {
 		log.Printf("Error responding: %v", err)
+	}
+}
+
+func updateResponseOrLog(s *discordgo.Session, i *discordgo.Interaction, edit *discordgo.WebhookEdit) {
+	_, err := s.InteractionResponseEdit(i, edit)
+
+	if err != nil {
+		log.Printf("Error updating: %v", err)
 	}
 }
