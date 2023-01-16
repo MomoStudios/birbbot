@@ -39,7 +39,7 @@ func init() {
 
 var (
 	objects = []string{
-		"mimi", "momo", "mimo", "tree", "birb", "shiro",
+		"mimi", "momo", "mimo", "tree", "birb", "shiro", "wolfgang",
 	}
 
 	authorized_accounts = []string{
